@@ -39,24 +39,23 @@ def _build_generators(A: DFA) -> Dict[Letter, Tuple]:
     return generators, states
 
 
-def _compose(f: Tuple, g: Tuple) -> Tuple:
+def _compose(f: Tuple, g: Tuple, states: list, state_to_idx: dict) -> Tuple:
     """
-    Compose transformations: (f ∘ g)(q) = g(f(q)).
+    Compose transformations: apply f first, then g.
 
-    Since transformations are tuples indexed by position,
-    composition f then g means: for each position i, result[i] = g[f[i]].
+    Convention: reading letter a then letter b means t_b ∘ t_a.
+    So compose(f, g)[i] = g[state_to_idx[f[i]]].
 
-    Note: We follow the convention that reading letter a then letter b
-    means applying t_a first, then t_b. So the product t_a · t_b = t_b ∘ t_a.
+    f and g are tuples indexed by position in sorted states.
+    f[i] is the state that states[i] maps to under f.
+    We then look up where that state goes under g.
     """
-    # TODO: Implement
-    pass
+    return tuple(g[state_to_idx[f[i]]] for i in range(len(f)))
 
 
 def _is_constant(t: Tuple) -> bool:
     """Check if transformation t is constant (all elements equal)."""
-    # TODO: Implement
-    pass
+    return len(set(t)) == 1
 
 
 def is_synchronizing_monoid(A: DFA) -> bool:
@@ -75,5 +74,31 @@ def is_synchronizing_monoid(A: DFA) -> bool:
     Warning: Can be extremely slow for large |Q|. The monoid can contain
     up to |Q|^|Q| elements.
     """
-    # TODO: Implement BFS over transition monoid
-    pass
+    generators, states = _build_generators(A)
+    state_to_idx = {s: i for i, s in enumerate(states)}
+
+    # Collect generator transformations
+    gen_list = list(generators.values())
+
+    # Check generators themselves
+    visited = set()
+    queue = deque()
+    for t in gen_list:
+        if t not in visited:
+            if _is_constant(t):
+                return True
+            visited.add(t)
+            queue.append(t)
+
+    # BFS: for each transformation, compose with each generator
+    while queue:
+        f = queue.popleft()
+        for g in gen_list:
+            fg = _compose(f, g, states, state_to_idx)
+            if fg not in visited:
+                if _is_constant(fg):
+                    return True
+                visited.add(fg)
+                queue.append(fg)
+
+    return False

@@ -40,8 +40,75 @@ def shorten_reset_word(
     Returns:
         A (possibly shorter) reset word for A. Guaranteed to still be valid.
     """
-    # TODO: Implement heuristic shortening strategies
-    pass
+    if method == "greedy":
+        return _greedy_shorten(A, word)
+    elif method == "window":
+        return _window_shorten(A, word)
+    elif method == "suffix":
+        return _suffix_shorten(A, word)
+    else:
+        return _greedy_shorten(A, word)
+
+
+def _greedy_shorten(A: DFA, word: List[Letter]) -> List[Letter]:
+    """
+    Greedy trimming: repeatedly scan the word and try removing each letter.
+    If removing it still yields a valid reset word, keep the removal.
+    Repeat until no more removals are possible.
+    """
+    current = list(word)
+    changed = True
+    while changed:
+        changed = False
+        i = 0
+        while i < len(current):
+            candidate = current[:i] + current[i + 1:]
+            if is_synchronizing_word(A, candidate):
+                current = candidate
+                changed = True
+                # Don't increment i — next letter is now at position i
+            else:
+                i += 1
+    return current
+
+
+def _window_shorten(A: DFA, word: List[Letter]) -> List[Letter]:
+    """
+    Sliding window: try removing windows of increasing size.
+    Start with size 2, then 3, etc.
+    """
+    current = list(word)
+    for window_size in range(2, len(current)):
+        i = 0
+        while i + window_size <= len(current):
+            candidate = current[:i] + current[i + window_size:]
+            if is_synchronizing_word(A, candidate):
+                current = candidate
+                # Restart from beginning with this window size
+                i = 0
+            else:
+                i += 1
+    # Also do single-letter greedy pass
+    return _greedy_shorten(A, current)
+
+
+def _suffix_shorten(A: DFA, word: List[Letter]) -> List[Letter]:
+    """
+    Suffix trimming: try cutting off letters from the end.
+    Find the shortest prefix that is still a reset word.
+    """
+    current = list(word)
+    # Binary search for shortest valid prefix
+    lo, hi = 1, len(current)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if is_synchronizing_word(A, current[:mid]):
+            hi = mid
+        else:
+            lo = mid + 1
+    current = current[:lo]
+    # Then do greedy pass
+    return _greedy_shorten(A, current)
 
 
 def compare_reset_words(
@@ -61,5 +128,35 @@ def compare_reset_words(
         - 'ratio_shortened': len_shortened / len_images
         - 'cerny_bound': (n-1)^2 where n = |Q|
     """
-    # TODO: Implement comparison
-    pass
+    n = len(A[0])
+    cerny_bound = (n - 1) ** 2
+
+    result = {
+        'cerny_bound': cerny_bound,
+        'n_states': n,
+    }
+
+    if word_images is not None:
+        result['len_images'] = len(word_images)
+    else:
+        result['len_images'] = None
+
+    if word_pair_graph is not None:
+        result['len_pair_graph'] = len(word_pair_graph)
+        shortened = shorten_reset_word(A, word_pair_graph)
+        result['len_shortened'] = len(shortened)
+        result['shortened_word'] = shortened
+    else:
+        result['len_pair_graph'] = None
+        result['len_shortened'] = None
+        result['shortened_word'] = None
+
+    # Compute ratios (only if both are available and images length > 0)
+    if result['len_images'] and result['len_pair_graph']:
+        result['ratio'] = result['len_pair_graph'] / result['len_images']
+        result['ratio_shortened'] = result['len_shortened'] / result['len_images']
+    else:
+        result['ratio'] = None
+        result['ratio_shortened'] = None
+
+    return result
