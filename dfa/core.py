@@ -108,8 +108,9 @@ def random_dfa(
     """
     Generate a random DFA with n states and alphabet of size m.
 
-    Each transition τ(q, a) is chosen uniformly at random from Q.
-    Random DFAs are almost surely synchronizing for |Σ| >= 2 as n → ∞.
+    Guarantees that every state is reachable from q_s (state 0) by first
+    building a random spanning tree, then filling remaining transitions
+    uniformly at random.
 
     Parameters:
         n         — number of states (Q = {0, 1, ..., n-1})
@@ -117,18 +118,51 @@ def random_dfa(
         num_final — number of accepting states (random subset), default n//3
         seed      — random seed for reproducibility
 
-    Returns a DFA 5-tuple.
+    Returns a DFA 5-tuple where all states are reachable from q_s.
     """
     if seed is not None:
         _random.seed(seed)
 
     Q = set(range(n))
     Sigma = set(range(m))
+    letters = list(Sigma)
 
     tau = {}
+
+    # Build a random spanning tree from q_s=0 to ensure full reachability.
+    # For each unreached state, pick a reached state with a free letter slot
+    # and assign the transition to the new state.
+    unreached = list(range(1, n))
+    _random.shuffle(unreached)
+    reached = [0]
+    used_edges = set()  # track (source, letter) pairs used for the tree
+
+    for target in unreached:
+        # Find a (source, letter) pair that hasn't been used yet
+        _random.shuffle(reached)
+        assigned = False
+        for source in reached:
+            available = [a for a in letters if (source, a) not in used_edges]
+            if available:
+                a = _random.choice(available)
+                tau[(source, a)] = target
+                used_edges.add((source, a))
+                assigned = True
+                break
+        if not assigned:
+            # All letter slots from reached states are taken — use any source,
+            # overwriting is unavoidable but the target will still be reachable
+            source = _random.choice(reached)
+            a = _random.choice(letters)
+            tau[(source, a)] = target
+            used_edges.add((source, a))
+        reached.append(target)
+
+    # Fill all remaining transitions randomly
     for q in Q:
         for a in Sigma:
-            tau[(q, a)] = _random.randint(0, n - 1)
+            if (q, a) not in tau:
+                tau[(q, a)] = _random.randint(0, n - 1)
 
     q_s = 0
 
